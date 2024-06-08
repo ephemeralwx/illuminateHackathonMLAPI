@@ -17,6 +17,7 @@ def load_trained_model(model_path):
     model.eval()
     return model
 
+#this model should be the right model idk check file loc
 model_path = "brain_tumor_model_include_four_classification_confidence.pth"
 model = load_trained_model(model_path)
 
@@ -38,3 +39,45 @@ def preprocess_image(image_bytes):
     image=transform(image).unsqueeze(0)
     return image
 
+
+def predict_class(image_bytes):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
+    image = preprocess_image(image_bytes)
+    image = image.to(device)
+
+    #TESTING ;
+    with torch.no_grad():
+        outputs = model(image)
+        probabilities = F.softmax(outputs, dim=1)
+
+        predicted = torch.argmax(probabilities, dim=1)
+
+        predicted_class = predicted.item()
+        confidence = probabilities[0][predicted_class].item()
+
+    classes = ['Normal', 'Glioma', 'Meningioma', 'Pituitary']
+    return classes[predicted.item()], confidence
+
+
+
+#FLASK
+@app.route('/predict', methods=['POST'])
+@cross_origin() 
+#CORS
+
+def predict():
+    if 'file' not in request.files:
+
+        return jsonify({'error': 'no file given??'}), 400
+    file = request.files['file']
+    if file is None or file.filename == "":
+        return jsonify({'error': 'no file given??'}), 400
+    try:
+        predicted_class, confidence = predict_class(file)
+        return jsonify({'prediction': predicted_class, 'confidence': confidence})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+#run
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
